@@ -327,6 +327,7 @@ Requires:         python-novaclient
 Requires:         python-oslo-config
 Requires:         python-pyasn1
 Requires:         python-babel
+Requires:         python-jinja2
 
 %description -n   python-nova
 OpenStack Compute (codename Nova) is open source software designed to
@@ -798,6 +799,9 @@ fi
 %endif
 
 %changelog
+* Wed Sep 4 2013 Dan Prince - 2013.1-0.9.g3
+- Add dependency on python-jinja2.
+
 * Thu Aug 22 2013 Dan Prince - 2013.1-0.9.g3
 - Add dependency on python-babel.
 
