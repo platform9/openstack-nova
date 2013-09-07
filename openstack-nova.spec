@@ -325,6 +325,7 @@ Requires:         python-glanceclient >= 1:0
 Requires:         python-neutronclient
 Requires:         python-novaclient
 Requires:         python-oslo-config
+Requires:         python-oslo-messaging
 Requires:         python-pyasn1
 Requires:         python-babel
 Requires:         python-jinja2
@@ -799,6 +800,9 @@ fi
 %endif
 
 %changelog
+* Fri Sep 6 2013 Dan Prince - 2013.1-0.9.g3
+- Add dependency on python-oslo-messaging.
+
 * Wed Sep 4 2013 Dan Prince - 2013.1-0.9.g3
 - Add dependency on python-jinja2.
 
