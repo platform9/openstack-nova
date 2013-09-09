@@ -1,16 +1,16 @@
 %global with_doc %{!?_without_doc:1}%{?_without_doc:0}
 
 Name:             openstack-nova
-Version:          2013.1
-Release:          0.9.g3%{?dist}
+Version:          2013.2
+Release:          0.16.b3%{?dist}
 Summary:          OpenStack Compute (nova)
 
 Group:            Applications/System
 License:          ASL 2.0
 URL:              http://openstack.org/projects/compute/
-Source0:          https://launchpad.net/nova/grizzly/grizzly-3/+download/nova-2013.1.g3.tar.gz
+Source0:	  https://launchpad.net/nova/havana/havana-3/+download/nova-%{version}.b3.tar.gz
 
-Source1:          nova.conf
+Source1:          nova-dist.conf
 Source6:          nova.logrotate
 
 Source10:         openstack-nova-api.service
@@ -26,14 +26,16 @@ Source25:         openstack-nova-metadata-api.service
 Source26:         openstack-nova-conductor.service
 Source27:         openstack-nova-cells.service
 Source28:         openstack-nova-spicehtml5proxy.service
+Source29:         openstack-nova-novncproxy.service
 
 Source21:         nova-polkit.pkla
 Source23:         nova-polkit.rules
 Source22:         nova-ifc-template
 Source24:         nova-sudoers
+Source30:         openstack-nova-novncproxy.sysconfig
 
 #
-# patches_base=2013.1.g3
+# patches_base=2013.2.b3
 #
 Patch0001: 0001-Ensure-we-don-t-access-the-net-when-building-docs.patch
 
@@ -56,6 +58,7 @@ Requires:         openstack-nova-objectstore = %{version}-%{release}
 Requires:         openstack-nova-conductor = %{version}-%{release}
 Requires:         openstack-nova-console = %{version}-%{release}
 Requires:         openstack-nova-cells = %{version}-%{release}
+Requires:         openstack-nova-novncproxy = %{version}-%{release}
 
 
 %description
@@ -72,8 +75,6 @@ standard hardware configurations and seven major hypervisors.
 Summary:          Components common to all OpenStack Nova services
 Group:            Applications/System
 
-Requires:         python-pbr
-Requires:         python-d2to1
 Requires:         python-nova = %{version}-%{release}
 
 Requires(post):   systemd-units
@@ -136,6 +137,7 @@ Requires:         radvd
 Requires:         bridge-utils
 Requires:         dnsmasq
 Requires:         dnsmasq-utils
+Requires:         ebtables
 
 %description network
 OpenStack Compute (codename Nova) is open source software designed to
@@ -284,6 +286,28 @@ standard hardware configurations and seven major hypervisors.
 This package contains the Nova Cells service providing additional 
 scaling and (geographic) distribution for compute services.
 
+%package novncproxy
+Summary:          OpenStack Nova noVNC proxy service
+Group:            Applications/System
+
+Requires:         openstack-nova-common = %{version}-%{release}
+Requires:         novnc
+Requires: 	  python-websockify
+
+
+%description novncproxy
+OpenStack Compute (codename Nova) is open source software designed to
+provision and manage large networks of virtual machines, creating a
+redundant and scalable cloud computing platform. It gives you the
+software, control panels, and APIs required to orchestrate a cloud,
+including running instances, managing networks, and controlling access
+through users and projects. OpenStack Compute strives to be both
+hardware and hypervisor agnostic, currently supporting a variety of
+standard hardware configurations and seven major hypervisors.
+
+This package contains the Nova noVNC Proxy service that can proxy 
+VNC traffic over browser websockets connections.
+
 %package -n       python-nova
 Summary:          Nova Python libraries
 Group:            Applications/System
@@ -327,6 +351,8 @@ Requires:         python-novaclient
 Requires:         python-oslo-config
 Requires:         python-oslo-messaging
 Requires:         python-pyasn1
+Requires:         python-six
+Requires:         python-pbr
 Requires:         python-babel
 Requires:         python-jinja2
 
@@ -371,10 +397,13 @@ find . \( -name .gitignore -o -name .placeholder \) -delete
 
 find nova -name \*.py -exec sed -i '/\/usr\/bin\/env python/{d;q}' {} +
 
-# Nuke requirements.txt (which requires specific versions, etc)
-echo "" > requirements.txt
+sed -i '/setuptools_git/d' setup.py
+sed -i s/REDHATNOVAVERSION/%{version}/ nova/version.py
+sed -i s/REDHATNOVARELEASE/%{release}/ nova/version.py
 
-sed -i s/LOCALBRANCH:LOCALREVISION/%{release}/ nova/version.py
+# Remove the requirements file so that pbr hooks don't add it 
+# to distutils requiers_dist config
+rm -rf {test-,}requirements.txt tools/{pip,test}-requires
 
 %build
 %{__python} setup.py build
@@ -387,6 +416,52 @@ openstack-config --del etc/nova/api-paste.ini filter:authtoken auth_host
 openstack-config --del etc/nova/api-paste.ini filter:authtoken auth_port
 openstack-config --del etc/nova/api-paste.ini filter:authtoken auth_protocol
 openstack-config --del etc/nova/api-paste.ini filter:authtoken signing_dir
+openstack-config --del etc/nova/api-paste.ini filter:authtoken auth_version
+
+
+echo '
+#
+# Options to be passed to keystoneclient.auth_token middleware
+# NOTE: These options are not defined in nova but in keystoneclient
+#
+[keystone_authtoken]
+
+# the name of the admin tenant (string value)
+#admin_tenant_name=
+
+# the keystone admin username (string value)
+#admin_user=
+
+# the keystone admin password (string value)
+#admin_password=
+
+# the keystone host (string value)
+#auth_host=
+
+# the keystone port (integer value)
+#auth_port=
+
+# protocol to be used for auth requests http/https (string value)
+#auth_protocol=
+
+# Workaround for https://bugs.launchpad.net/nova/+bug/1154809
+#auth_version=
+
+# signing_dir is configurable, but the default behavior of the authtoken
+# middleware should be sufficient.  It will create a temporary directory
+# in the home directory for the user the nova process is running as.
+#signing_dir=/var/lib/nova/keystone-signing
+' >> etc/nova/nova.conf.sample
+
+# Programmatically update defaults in sample config
+# which is installed at /etc/nova/nova.conf
+# TODO: Make this more robust
+# Note it only edits the first occurance, so assumes a section ordering in sample
+# and also doesn't support multi-valued variables like dhcpbridge_flagfile.
+while read name eq value; do
+  test "$name" && test "$value" || continue
+  sed -i "0,/^# *$name=/{s!^# *$name=.*!#$name=$value!}" etc/nova/nova.conf.sample
+done < %{SOURCE1}
 
 %install
 %{__python} setup.py install -O1 --skip-build --root %{buildroot}
@@ -431,8 +506,8 @@ touch %{buildroot}%{_sharedstatedir}/nova/CA/private/cakey.pem
 
 # Install config files
 install -d -m 755 %{buildroot}%{_sysconfdir}/nova
-install -p -D -m 640 %{SOURCE1} %{buildroot}%{_sysconfdir}/nova/nova.conf
-install -d -m 755 %{buildroot}%{_sysconfdir}/nova/volumes
+install -p -D -m 640 %{SOURCE1} %{buildroot}%{_datadir}/nova/nova-dist.conf
+install -p -D -m 640 etc/nova/nova.conf.sample  %{buildroot}%{_sysconfdir}/nova/nova.conf
 install -p -D -m 640 etc/nova/rootwrap.conf %{buildroot}%{_sysconfdir}/nova/rootwrap.conf
 install -p -D -m 640 etc/nova/api-paste.ini %{buildroot}%{_sysconfdir}/nova/api-paste.ini
 install -p -D -m 640 etc/nova/policy.json %{buildroot}%{_sysconfdir}/nova/policy.json
@@ -459,6 +534,7 @@ install -p -D -m 755 %{SOURCE25} %{buildroot}%{_unitdir}/openstack-nova-metadata
 install -p -D -m 755 %{SOURCE26} %{buildroot}%{_unitdir}/openstack-nova-conductor.service
 install -p -D -m 755 %{SOURCE27} %{buildroot}%{_unitdir}/openstack-nova-cells.service
 install -p -D -m 755 %{SOURCE28} %{buildroot}%{_unitdir}/openstack-nova-spicehtml5proxy.service
+install -p -D -m 755 %{SOURCE29} %{buildroot}%{_unitdir}/openstack-nova-novncproxy.service
 
 # Install sudoers
 install -p -D -m 440 %{SOURCE24} %{buildroot}%{_sysconfdir}/sudoers.d/nova
@@ -484,15 +560,16 @@ install -p -D -m 644 %{SOURCE21} %{buildroot}%{_sysconfdir}/polkit-1/localauthor
 install -d -m 755 %{buildroot}%{_sysconfdir}/polkit-1/rules.d
 install -p -D -m 644 %{SOURCE23} %{buildroot}%{_sysconfdir}/polkit-1/rules.d/50-nova.rules
 
+# Install novncproxy service options template
+install -d %{buildroot}%{_sysconfdir}/sysconfig
+install -p -m 0644 %{SOURCE30} %{buildroot}%{_sysconfdir}/sysconfig/openstack-nova-novncproxy
+
 # Remove unneeded in production stuff
 rm -f %{buildroot}%{_bindir}/nova-debug
 rm -fr %{buildroot}%{python_sitelib}/nova/tests/
 rm -fr %{buildroot}%{python_sitelib}/run_tests.*
 rm -f %{buildroot}%{_bindir}/nova-combined
 rm -f %{buildroot}/usr/share/doc/nova/README*
-
-# We currently use the equivalent file from the novnc package
-rm -f %{buildroot}%{_bindir}/nova-novncproxy
 
 %pre common
 getent group nova >/dev/null || groupadd -r nova --gid 162
@@ -615,6 +692,13 @@ if [ $1 -eq 0 ] ; then
         /bin/systemctl stop openstack-nova-${svc}.service > /dev/null 2>&1 || :
     done
 fi
+%preun novncproxy
+if [ $1 -eq 0 ] ; then
+    for svc in novncproxy; do
+        /bin/systemctl --no-reload disable openstack-nova-${svc}.service > /dev/null 2>&1 || :
+        /bin/systemctl stop openstack-nova-${svc}.service > /dev/null 2>&1 || :
+    done
+fi
 
 %postun compute
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
@@ -688,6 +772,14 @@ if [ $1 -ge 1 ] ; then
         /bin/systemctl try-restart openstack-nova-${svc}.service >/dev/null 2>&1 || :
     done
 fi
+%postun novncproxy
+/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+if [ $1 -ge 1 ] ; then
+    # Package upgrade, not uninstall
+    for svc in novncproxy; do
+        /bin/systemctl try-restart openstack-nova-${svc}.service >/dev/null 2>&1 || :
+    done
+fi
 
 %files
 %doc LICENSE
@@ -697,6 +789,7 @@ fi
 %doc LICENSE
 %dir %{_sysconfdir}/nova
 %{_sysconfdir}/nova/release
+%attr(-, root, nova) %{_datadir}/nova/nova-dist.conf
 %config(noreplace) %attr(-, root, nova) %{_sysconfdir}/nova/nova.conf
 %config(noreplace) %attr(-, root, nova) %{_sysconfdir}/nova/api-paste.ini
 %config(noreplace) %attr(-, root, nova) %{_sysconfdir}/nova/rootwrap.conf
@@ -788,6 +881,11 @@ fi
 %{_bindir}/nova-cells
 %{_unitdir}/openstack-nova-cells.service
 
+%files novncproxy
+%{_bindir}/nova-novncproxy
+%{_unitdir}/openstack-nova-novncproxy.service
+%config(noreplace) %{_sysconfdir}/sysconfig/openstack-nova-novncproxy
+
 %files -n python-nova
 %defattr(-,root,root,-)
 %doc LICENSE
@@ -800,35 +898,81 @@ fi
 %endif
 
 %changelog
-* Fri Sep 6 2013 Dan Prince - 2013.1-0.9.g3
-- Add dependency on python-oslo-messaging.
-
-* Wed Sep 4 2013 Dan Prince - 2013.1-0.9.g3
-- Add dependency on python-jinja2.
-
-* Thu Aug 22 2013 Dan Prince - 2013.1-0.9.g3
+* Mon Sep 09 2013 Dan Prince <dprince@redhat.com> - 2013.2-0.16.b3
+- Sync w/ downstream Havana 3 release.
+- Add runtime dependency on python-pbr. (upstream won't carry this patch)
 - Add dependency on python-babel.
+- Add dependency on python-jinja2.
+- Add dependency on python-oslo-messaging (in preparation for I)
 
-* Sat Jul 13 2013 Dan Prince - 2013.1-0.9.g3
-- Add dependency on python-neutronclient.
+* Mon Sep 09 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.16.b3
+- Update to Havana milestone 3
 
-* Mon Jul 8 2013 Dan Prince - 2013.1-0.9.g3
-- Add build requires for python-oslo-sphinx
+* Tue Aug 27 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.15.b2
+- Fix the tarball download link (SOURCE0)
 
-* Wed May 29 2013 Dan Prince - 2013.1-0.9.g3
-- Add missing dep on d2to1.
+* Tue Aug 27 2013 Xavier Queralt <xqueralt@redhat.com> - 2013.2-0.14.b2
+- Set auth_version=v2.0 in nova-dist.conf to avoid http://pad.lv/1154809
 
-* Wed May 23 2013 Dan Prince - 2013.1-0.9.g3
-- Updated use requirements.txt.
+* Tue Aug 27 2013 Xavier Queralt <xqueralt@redhat.com> - 2013.2-0.13.b2
+- Remove Folsom release deprecated config options from nova-dist.conf
 
-* Wed May 8 2013 Dan Prince - 2013.1-0.9.g3
-- Updates to work w/ pbr.
+* Tue Aug 27 2013 Xavier Queralt <xqueralt@redhat.com> - 2013.2-0.12.b2
+- Add the second dhcpbridge-flagfile to nova-dist.conf 
 
-* Thu Apr 4 2013 Dan Prince - 2013.1-0.9.g3
-- Add patch to remove auto deps.
+* Tue Aug 27 2013 Xavier Queralt <xqueralt@redhat.com> - 2013.2-0.11.b2
+- Change the default config to poll for DB connection indefinitely
 
-* Thu Mar 14 2013 Dan Prince - 2013.1-0.9.g3
-- Remove nova-tgt.conf (no longer used).
+* Wed Aug 07 2013 Xavier Queralt <xqueralt@redhat.com> - 2013.2-0.10.b2
+- Create a nova-dist.conf file with default values under /usr/share
+
+* Sat Aug 03 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2013.2-0.9.b2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
+
+* Sun Jul 22 2013 Pádraig Brady <pbrady@redhat.com> - 2013.2-0.8.b2
+- Update to Havana milestone 2
+
+* Mon Jun 24 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.6.b1
+- Add the novncproxy subpackage (moved from the novnc package)
+
+* Mon Jun 24 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.4.h1
+- Remove requirements file to be more flexible with dep versions
+
+* Fri Jun 14 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.3.h1
+- Fix an issue with the version string
+
+* Mon Jun 10 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.2.h1
+- Add a runtime dep on python-six
+- Fix verision reporting
+
+* Fri Jun 07 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.1.h1
+- Update to Havana milestone 1
+- Add a build-time dep on python-d2to1
+- Add a build-time dep on python-pbr
+
+* Fri May 17 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.1-2
+- Check QCOW2 image size during root disk creation (CVE-2013-2096)
+
+* Mon May 13 2013 Pádraig Brady <pbrady@redhat.com> - 2013.1.1-1
+- Update to stable/grizzly 2013.1.1 release
+
+* Fri May 10 2013 Pádraig Brady <pbrady@redhat.com> - 2013.1-3
+- Make openstack-nova-network depend on ebtables #961567
+
+* Thu Apr 11 2013 Pádraig Brady <pbrady@redhat.com> - 2013.1-2
+- Fix nova network dnsmasq invocation failure #951144
+
+* Mon Apr 08 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.1-1
+- Update to Grizzly final
+
+* Tue Apr 02 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.1-0.12.rc2
+- Update to Grizzly rc2
+
+* Fri Mar 22 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.1-0.11.rc1
+- Update to Grizzly rc1
+
+* Wed Mar 20 2013 Pádraig Brady - 2013.1-0.10.g3
+- Remove /etc/tgt/conf.d/nova.conf which was invalid for grizzly
 
 * Tue Mar 12 2013 Pádraig Brady - 2013.1-0.9.g3
 - Allow openstack-nova-doc to be installed in isolation
