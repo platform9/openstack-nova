@@ -1,38 +1,22 @@
 #!/bin/sh
 #
-# openstack-nova-compute  OpenStack Nova Compute Worker
+# openstack-nova-novncproxy  OpenStack Nova Console noVNC Proxy
 #
 # chkconfig:   - 98 02
-# description: Compute workers manage computing instances on host  \
-#               machines. Through the API, commands are dispatched \
-#               to compute workers to:                             \
-#               * Run instances                                    \
-#               * Terminate instances                              \
-#               * Reboot instances                                 \
-#               * Attach volumes                                   \
-#               * Detach volumes                                   \
-#               * Get console output
+# description: OpenStack Nova Console noVNC Proxy Server
 
 ### BEGIN INIT INFO
 # Provides:
 # Required-Start: $remote_fs $network $syslog
 # Required-Stop: $remote_fs $syslog
 # Default-Stop: 0 1 6
-# Short-Description: OpenStack Nova Compute Worker
-# Description: Compute workers manage computing instances on host
-#               machines. Through the API, commands are dispatched
-#               to compute workers to:
-#               * Run instances
-#               * Terminate instances
-#               * Reboot instances
-#               * Attach volumes
-#               * Detach volumes
-#               * Get console output
+# Short-Description: OpenStack Nova Console noVNC Proxy
+# Description: OpenStack Nova Console noVNC Proxy Server
 ### END INIT INFO
 
 . /etc/rc.d/init.d/functions
 
-suffix=compute
+suffix=novncproxy
 prog=openstack-nova-$suffix
 exec="/usr/bin/nova-$suffix"
 config="/etc/nova/nova.conf"
@@ -47,7 +31,7 @@ start() {
     [ -x $exec ] || exit 5
     [ -f $config ] || exit 6
     echo -n $"Starting $prog: "
-    daemon --user nova --pidfile $pidfile "$exec --logfile $logfile &>/dev/null & echo \$! > $pidfile"
+    daemon --user nova --pidfile $pidfile "$exec --web /usr/share/novnc/ ${OPTIONS} &>/dev/null & echo \$! > $pidfile"
     retval=$?
     echo
     [ $retval -eq 0 ] && touch $lockfile
