@@ -420,7 +420,7 @@ This package contains documentation files for nova.
 %endif
 
 %prep
-%setup -q -n nova-%{version}.b3
+%setup -q -n nova-%{version}
 
 %patch0001 -p1
 %patch0002 -p1
