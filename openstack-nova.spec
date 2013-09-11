@@ -2,7 +2,7 @@
 
 Name:             openstack-nova
 Version:          2013.2
-Release:          0.16.b3%{?dist}
+Release:          0.19.b3%{?dist}
 Summary:          OpenStack Compute (nova)
 
 Group:            Applications/System
@@ -38,6 +38,9 @@ Source30:         openstack-nova-novncproxy.sysconfig
 # patches_base=2013.2.b3
 #
 Patch0001: 0001-Ensure-we-don-t-access-the-net-when-building-docs.patch
+Patch0002: 0002-remove-runtime-dep-on-python-pbr.patch
+Patch0003: 0003-Revert-Use-oslo.sphinx-and-remove-local-copy-of-doc-.patch
+Patch0004: 0004-Fix-compute_node_get_all-for-Nova-Baremetal.patch
 
 BuildArch:        noarch
 BuildRequires:    intltool
@@ -46,7 +49,6 @@ BuildRequires:    python-setuptools
 BuildRequires:    python-netaddr
 BuildRequires:    openstack-utils
 BuildRequires:    python-pbr
-BuildRequires:    python-d2to1
 BuildRequires:    python-oslo-sphinx
 
 Requires:         openstack-nova-compute = %{version}-%{release}
@@ -113,6 +115,8 @@ Requires:         rsync
 Requires:         lvm2
 Requires:         python-cinderclient
 Requires(pre):    qemu-kvm
+Requires:         sysfsutils
+Requires:         genisoimage
 
 %description compute
 OpenStack Compute (codename Nova) is open source software designed to
@@ -349,13 +353,11 @@ Requires:         python-glanceclient >= 1:0
 Requires:         python-neutronclient
 Requires:         python-novaclient
 Requires:         python-oslo-config
-Requires:         python-oslo-messaging
 Requires:         python-pyasn1
 Requires:         python-six
-Requires:         python-pbr
 Requires:         python-babel
 Requires:         python-jinja2
-Requires:         sysfsutils
+Requires:         python-oslo-messaging
 
 %description -n   python-nova
 OpenStack Compute (codename Nova) is open source software designed to
@@ -393,6 +395,9 @@ This package contains documentation files for nova.
 %setup -q -n nova-%{version}
 
 %patch0001 -p1
+%patch0002 -p1
+#%patch0003 -p1
+#%patch0004 -p1
 
 find . \( -name .gitignore -o -name .placeholder \) -delete
 
@@ -899,14 +904,25 @@ fi
 %endif
 
 %changelog
-* Mon Sep 09 2013 Dan Prince <dprince@redhat.com> - 2013.2-0.16.b3
-- Sync w/ downstream Havana 3 release.
-- Add runtime dependency on python-pbr. (upstream won't carry this patch)
-- Add dependency on python-babel.
-- Add dependency on python-jinja2.
+* Wed Sep 11 2013 Dan Prince <dprince@redhat.com> - 2013.2-0.19.b3
+- Rebase on downstream packages.
+- Drop b3 from package name.
+- Comment out patches.
+- Drop build dependency on python-d2to1.
+- Add compute dependency on genisoimage (for Cloud Drive support)
+- Add compute dependency on sysfsutils  (for volume support)
 - Add dependency on python-oslo-messaging (in preparation for I)
-- Add dependency on sysfsutils
-- Set resize_fs_using_block_device=False by default.
+- Add build dep on python-oslo-sphinx (patch removed).
+
+* Mon Sep 09 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.19.b3
+- Fix compute_node_get_all() for Nova Baremetal
+
+* Mon Sep 09 2013 Pádraig Brady <pbrady@redhat.com> - 2013.2-0.18.b3
+- Avoid deprecated options in distribution config files
+
+* Mon Sep 09 2013 Dan Prince <dprince@redhat.com> - 2013.2-0.17.b3
+- Add dependency on python-babel
+- Add dependency on python-jinja2
 
 * Mon Sep 09 2013 Nikola Đipanov <ndipanov@redhat.com> - 2013.2-0.16.b3
 - Update to Havana milestone 3
