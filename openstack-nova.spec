@@ -117,6 +117,7 @@ Requires:         python-cinderclient
 Requires(pre):    qemu-kvm
 Requires:         sysfsutils
 Requires:         genisoimage
+Requires:         python-psutil
 
 %description compute
 OpenStack Compute (codename Nova) is open source software designed to
@@ -218,6 +219,7 @@ Summary:          OpenStack Nova Conductor services
 Group:            Applications/System
 
 Requires:         openstack-nova-common = %{version}-%{release}
+Requires:         python-psutil
 
 %description conductor
 OpenStack Compute (codename Nova) is open source software designed to
@@ -287,7 +289,7 @@ through users and projects. OpenStack Compute strives to be both
 hardware and hypervisor agnostic, currently supporting a variety of
 standard hardware configurations and seven major hypervisors.
 
-This package contains the Nova Cells service providing additional 
+This package contains the Nova Cells service providing additional
 scaling and (geographic) distribution for compute services.
 
 %package novncproxy
@@ -309,7 +311,7 @@ through users and projects. OpenStack Compute strives to be both
 hardware and hypervisor agnostic, currently supporting a variety of
 standard hardware configurations and seven major hypervisors.
 
-This package contains the Nova noVNC Proxy service that can proxy 
+This package contains the Nova noVNC Proxy service that can proxy
 VNC traffic over browser websockets connections.
 
 %package -n       python-nova
@@ -407,7 +409,7 @@ sed -i '/setuptools_git/d' setup.py
 sed -i s/REDHATNOVAVERSION/%{version}/ nova/version.py
 sed -i s/REDHATNOVARELEASE/%{release}/ nova/version.py
 
-# Remove the requirements file so that pbr hooks don't add it 
+# Remove the requirements file so that pbr hooks don't add it
 # to distutils requiers_dist config
 rm -rf {test-,}requirements.txt tools/{pip,test}-requires
 
@@ -937,7 +939,7 @@ fi
 - Remove Folsom release deprecated config options from nova-dist.conf
 
 * Tue Aug 27 2013 Xavier Queralt <xqueralt@redhat.com> - 2013.2-0.12.b2
-- Add the second dhcpbridge-flagfile to nova-dist.conf 
+- Add the second dhcpbridge-flagfile to nova-dist.conf
 
 * Tue Aug 27 2013 Xavier Queralt <xqueralt@redhat.com> - 2013.2-0.11.b2
 - Change the default config to poll for DB connection indefinitely
