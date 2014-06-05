@@ -162,6 +162,8 @@ Summary:          OpenStack Nova VM distribution service
 Group:            Applications/System
 
 Requires:         openstack-nova-common = %{version}-%{release}
+Requires:         python-psutil
+Requires:         python-netifaces
 
 %description scheduler
 OpenStack Compute (codename Nova) is open source software designed to
@@ -220,6 +222,7 @@ Group:            Applications/System
 
 Requires:         openstack-nova-common = %{version}-%{release}
 Requires:         python-psutil
+Requires:         python-netifaces
 
 %description conductor
 OpenStack Compute (codename Nova) is open source software designed to
